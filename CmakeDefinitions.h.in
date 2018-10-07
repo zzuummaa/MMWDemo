@@ -1,0 +1,11 @@
+//
+// Created by Stephan on 07.10.2018.
+//
+
+#ifndef CALLBACKS_CMAKEDEFINITIONS_H
+#define CALLBACKS_CMAKEDEFINITIONS_H
+
+// define your version_libinterface
+#define TEST_FILES_DIR "@TEST_FILES_DIR@"
+
+#endif //CALLBACKS_CMAKEDEFINITIONS_H
