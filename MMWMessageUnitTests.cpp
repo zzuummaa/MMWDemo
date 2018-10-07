@@ -50,24 +50,33 @@ protected:
 };
 
 TEST_F(MMWMessageDetects, TLV_init_detObjs_empty) {
-    TLV tlv(tlvPacket0.data());
+    TLV tlv(tlvPacket0);
     ASSERT_EQ(tlv.length(), sizeof(TLV::Header) + sizeof(TLV::DataObjDescr));
     ASSERT_EQ(tlv.type(), header0.type);
 }
 
 TEST_F(MMWMessageDetects, TLV_init_detObjs_non_empty) {
-    TLV tlv(tlvPacket2.data());
+    TLV tlv(tlvPacket2);
     ASSERT_EQ(tlv.length(), sizeof(TLV::Header) + sizeof(TLV::DataObjDescr) + sizeof(detObjArr));
     ASSERT_EQ(tlv.type(), header2.type);
 }
 
+TEST_F(MMWMessageDetects, TLV_init_small_length) {
+    TLV tlv(tlvPacket2.data(0), tlvPacket2.length() - 1);
+    ASSERT_EQ(tlv.length(), 0);
+    ASSERT_EQ(tlv.type(), TLV::Type::MAX);
+    ASSERT_EQ(tlv.asDetects().length(), 0);
+    ASSERT_EQ(tlv.asClusteringReport().length(), 0);
+    ASSERT_EQ(tlv.asTrackingReport().length(), 0);
+}
+
 TEST_F(MMWMessageDetects, TLV_asDetects_empty) {
-    TLV tlv(tlvPacket0.data());
+    TLV tlv(tlvPacket0);
     ASSERT_EQ(tlv.asDetects().length(), 0);
 }
 
 TEST_F(MMWMessageDetects, TLV_asDetects_non_empty) {
-    TLV tlv(tlvPacket2.data());
+    TLV tlv(tlvPacket2);
     PIVector<TLV::DetObj> vec = tlv.asDetects();
     ASSERT_EQ(vec.length(), sizeof(detObjArr) / sizeof(detObjArr[0]));
     for (int i = 0; i < vec.length(); ++i) {
@@ -76,7 +85,7 @@ TEST_F(MMWMessageDetects, TLV_asDetects_non_empty) {
 }
 
 TEST_F(MMWMessageDetects, TLV_is_data_local_copy){
-    TLV tlv(tlvPacket2.data());
+    TLV tlv(tlvPacket2);
     memset(tlvPacket2.data(), 0, tlvPacket2.length());
     ASSERT_EQ(tlv.length(), sizeof(TLV::Header) + sizeof(TLV::DataObjDescr) + sizeof(detObjArr));
     ASSERT_EQ(tlv.type(), header2.type);

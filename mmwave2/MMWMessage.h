@@ -16,12 +16,14 @@ public:
 
     /**
      * @note Constructor not parse payload.
-     * @note copy input bytes to local buffer.
+     * @note Copies input bytes to local buffer.
+     * @note Initialized as empty TLV if tlv_ length smaller then (sizeof(TLV::Header) + header.length)
      *
      * @param tlv_ tlv bytes of TLV packet (TLV::Header + TLV payload)
      */
     explicit TLV(const PIByteArray &tlv_);
-    explicit TLV(const uint8_t *tlv_);
+    explicit TLV(const uint8_t *tlv_, int maxLength);
+    TLV(const TLV &tlv): TLV(tlv.buff) {}
     ~TLV();
 
     enum Type {
@@ -108,14 +110,14 @@ public:
     };
 
     inline TLV::Type type() {
-        return header->type;
+        return header != nullptr ? header->type : TLV::Type::MAX;
     }
 
     /**
      * @return full TLV length (payload size) + (TLV header length) in bytes
      */
     inline int length() {
-        return header->length + sizeof(Header);
+        return header != nullptr ? header->length + sizeof(Header) : 0;
     }
 
     /**

@@ -4,16 +4,19 @@
 
 #include "MMWMessage.h"
 
-TLV::TLV(const uint8_t *tlv_) {
-    buff.append(tlv_, extractTLVLength(tlv_));
-    header = (Header *) buff.data(0);
-    data = buff.data(sizeof(Header));
+TLV::TLV(const uint8_t *tlv_, int maxLength) {
+    int tlvLen = extractTLVLength(tlv_);
+    if (tlvLen <= maxLength) {
+        buff.append(tlv_, maxLength);
+        header = (Header *) buff.data(0);
+        data = buff.data(sizeof(Header));
+    } else {
+        header = nullptr;
+        data = nullptr;
+    }
 }
 
-TLV::TLV(const PIByteArray &tlv_): buff(tlv_) {
-    header = (Header *) buff.data(0);
-    data = buff.data(sizeof(Header));
-}
+TLV::TLV(const PIByteArray &tlv_): TLV(tlv_.data(), tlv_.length()) {}
 
 /**
  * Add data from pointer to vector
@@ -84,7 +87,7 @@ inline void MMWMessage::init(const uint8_t *mmwMessage) {
     auto p = const_cast<uint8_t *>(mmwMessage + sizeof(MMWMessage::Header));
 
     for (int i = 0; i < header.numTLVs; ++i) {
-        TLV tlv = TLV(p);
+        TLV tlv = TLV(p, header.totalPacketLen);
         p += tlv.length();
         tlvs.push_back(tlv);
     }
