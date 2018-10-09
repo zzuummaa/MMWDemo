@@ -7,7 +7,7 @@
 TLV::TLV(const uint8_t *tlv_, int maxLength) {
     int tlvLen = extractTLVLength(tlv_);
     if (tlvLen <= maxLength) {
-        buff.append(tlv_, maxLength);
+        buff.append(tlv_, tlvLen);
         header = (Header *) buff.data(0);
         data = buff.data(sizeof(Header));
     } else {
@@ -17,6 +17,11 @@ TLV::TLV(const uint8_t *tlv_, int maxLength) {
 }
 
 TLV::TLV(const PIByteArray &tlv_): TLV(tlv_.data(), tlv_.length()) {}
+
+TLV::TLV() {
+    header = nullptr;
+    data = nullptr;
+}
 
 /**
  * Add data from pointer to vector
@@ -74,24 +79,38 @@ TLV::~TLV() {
     data = nullptr;
 }
 
-MMWMessage::MMWMessage(const uint8_t *mmwMessage) {
-    init(mmwMessage);
-}
-
-MMWMessage::MMWMessage(const PIByteArray &mmwMessage) {
-    init(mmwMessage.data(0));
-}
-
-inline void MMWMessage::init(const uint8_t *mmwMessage) {
-    memcpy(&header, mmwMessage, sizeof(MMWMessage::Header));
-    auto p = const_cast<uint8_t *>(mmwMessage + sizeof(MMWMessage::Header));
-
-    for (int i = 0; i < header.numTLVs; ++i) {
-        TLV tlv = TLV(p, header.totalPacketLen);
-        p += tlv.length();
-        tlvs.push_back(tlv);
+MMWMessage::MMWMessage(const uint8_t *mmwMessage, int maxSize) {
+    isValidPacket_ = false;
+    if (maxSize >= sizeof(MMWMessage::Header)) {
+        if (maxSize >= extractTotalPacketLength(mmwMessage)) {
+            isValidPacket_ = true;
+        }
     }
+
+    if (isValidPacket_) {
+        memcpy(&header, mmwMessage, sizeof(MMWMessage::Header));
+        auto p = const_cast<uint8_t *>(mmwMessage + sizeof(MMWMessage::Header));
+
+        int parsedBytes = 0;
+        for (int i = 0; i < header.numTLVs; ++i) {
+            TLV tlv = TLV(p + parsedBytes, header.totalPacketLen - parsedBytes - sizeof(MMWMessage::Header));
+            if (tlv.type() == TLV::Type::INVALID) {
+                isValidPacket_ = false;
+                tlvs.clear();
+                break;
+            }
+            parsedBytes += tlv.length();
+            tlvs.push_back(tlv);
+        }
+    }
+
+    if (!isValidPacket_) memset(&header, 0, sizeof(MMWMessage::Header));
+
 }
+
+MMWMessage::MMWMessage(const PIByteArray &mmwMessage): MMWMessage(mmwMessage.data(), mmwMessage.length()) {}
+
+MMWMessage::MMWMessage(): MMWMessage(nullptr, 0) {}
 
 const MMWMessage::Header &MMWMessage::getHeader() const {
     return header;
@@ -99,4 +118,8 @@ const MMWMessage::Header &MMWMessage::getHeader() const {
 
 const PIVector<TLV> &MMWMessage::getTlvs() const {
     return tlvs;
+}
+
+bool MMWMessage::isValidPacket() const {
+    return isValidPacket_;
 }

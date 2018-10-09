@@ -23,6 +23,7 @@ public:
      */
     explicit TLV(const PIByteArray &tlv_);
     explicit TLV(const uint8_t *tlv_, int maxLength);
+    explicit TLV();
     TLV(const TLV &tlv): TLV(tlv.buff) {}
     ~TLV();
 
@@ -36,7 +37,7 @@ public:
         RANGE_AZIMUT_HEAT_MAP = 8,
         FEATURE_VECTOR,
         DECISION,
-        MAX
+        INVALID
     };
 
     struct Header {
@@ -110,7 +111,7 @@ public:
     };
 
     inline TLV::Type type() {
-        return header != nullptr ? header->type : TLV::Type::MAX;
+        return header != nullptr ? header->type : TLV::Type::INVALID;
     }
 
     /**
@@ -148,10 +149,13 @@ inline int extractNumDetectObjs(const uint8_t *tlvData) {
     return ((TLV::DataObjDescr*)tlvData)->numDetetedObj;
 }
 
+inline int extractTotalPacketLength(const uint8_t *mmwMessageHeader);
+
 class MMWMessage {
 public:
-    explicit MMWMessage(const uint8_t *mmwMessage);
+    explicit MMWMessage(const uint8_t *mmwMessage, int maxSize);
     explicit MMWMessage(const PIByteArray& mmwMessage);
+    explicit MMWMessage();
 
     /*!
      * @brief
@@ -195,11 +199,22 @@ public:
 
     const PIVector<TLV> &getTlvs() const;
 
+    bool isValidPacket() const;
+
 private:
     MMWMessage::Header header;
     PIVector<TLV> tlvs;
-
-    void init(const uint8_t  *mmwMessage);
+    bool isValidPacket_;
 };
+
+const uint16_t requiredMagicWord[4] = {0x0102, 0x0304, 0x0506, 0x0708};
+
+inline bool isValidMagicWorld(const uint8_t *magicWorld) {
+    return memcmp(requiredMagicWord, magicWorld, sizeof(requiredMagicWord)) == 0;
+}
+
+inline int extractTotalPacketLength(const uint8_t *mmwMessageHeader) {
+    return ((MMWMessage::Header*)mmwMessageHeader)->totalPacketLen;
+}
 
 #endif //CALLBACKS_MMWDATA_H
