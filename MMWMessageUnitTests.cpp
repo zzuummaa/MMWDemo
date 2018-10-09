@@ -142,25 +142,39 @@ protected:
         TLV::Header detObjTLVHeader;
         detObjTLVHeader.type = TLV::Type::DETECTED_POINTS;
         detObjTLVHeader.length = sizeof(descr) + sizeof(detObj);
-        memset(&headerTLVs, 0, sizeof(headerTLVs));
-        memcpy(headerTLVs.magicWord, requiredMagicWord, sizeof(requiredMagicWord));
-        headerTLVs.numTLVs = 1;
-        packetLen = sizeof(headerTLVs) + sizeof(detObjTLVHeader) + detObjTLVHeader.length;
+        memset(&headerTLV, 0, sizeof(headerTLV));
+        memcpy(headerTLV.magicWord, requiredMagicWord, sizeof(requiredMagicWord));
+        headerTLV.numTLVs = 1;
+        packetLen = sizeof(headerTLV) + sizeof(detObjTLVHeader) + detObjTLVHeader.length;
+        packetLen += packetLen % 32 == 0 ? 0 : 32 - packetLen % 32;
+        headerTLV.totalPacketLen = packetLen;
+        messageArrTLV.append(&headerTLV, sizeof(headerTLV));
+        messageArrTLV.append(&detObjTLVHeader, sizeof(detObjTLVHeader));
+        messageArrTLV.append(&descr, sizeof(descr));
+        messageArrTLV.append(&detObj, sizeof(detObj));
+        messageArrTLV.append(&padding, 32 - messageArrTLV.length() % 32);
+
+        headerTLVs.numTLVs = TLV::Type::INVALID - 1;
+        packetLen = sizeof(headerTLV) + sizeof(TLV::Header) * headerTLVs.numTLVs;
         packetLen += packetLen % 32 == 0 ? 0 : 32 - packetLen % 32;
         headerTLVs.totalPacketLen = packetLen;
         messageArrTLVs.append(&headerTLVs, sizeof(headerTLVs));
-        messageArrTLVs.append(&detObjTLVHeader, sizeof(detObjTLVHeader));
-        messageArrTLVs.append(&descr, sizeof(descr));
-        messageArrTLVs.append(&detObj, sizeof(detObj));
+        for (uint32_t i = 1; i <= headerTLVs.numTLVs; ++i) {
+            TLV::Header tlvHeader;
+            tlvHeader.typeInt = i;
+            messageArrTLVs.append(&tlvHeader, sizeof(tlvHeader));
+        }
         messageArrTLVs.append(&padding, 32 - messageArrTLVs.length() % 32);
     }
     void TearDown() {
     }
 
     PIByteArray messageArrZero;
+    PIByteArray messageArrTLV;
     PIByteArray messageArrTLVs;
     MMWMessage::Header headerZero;
     MMWMessage::Header headerEmpty;
+    MMWMessage::Header headerTLV;
     MMWMessage::Header headerTLVs;
     TLV::DetObj detObj[2];
     uint8_t padding[32];
@@ -179,7 +193,7 @@ TEST_F(MMWMessageMessage, MMWMessage_init_zero_tlvs) {
     ASSERT_TRUE(memcmp(&headerZero, &message.getHeader(), sizeof(headerZero)) == 0);
 }
 
-TEST_F(MMWMessageMessage, TLV_init_detObjs_excess_malloc) {
+TEST_F(MMWMessageMessage, MMWMessage_init_excess_malloc) {
     MMWMessage message(messageArrZero.data(), INT32_MAX);
     ASSERT_TRUE(message.isValidPacket());
     ASSERT_EQ(message.getTlvs().length(), 0);
@@ -199,12 +213,23 @@ TEST_F(MMWMessageMessage, MMWMessage_init_input_data_length_smaller_then_magic_l
 }
 
 TEST_F(MMWMessageMessage, MMWMessage_tlv_detObj) {
-    MMWMessage message(messageArrTLVs.data(), messageArrTLVs.length());
+    MMWMessage message(messageArrTLV.data(), messageArrTLV.length());
     ASSERT_TRUE(message.isValidPacket());
     PIVector<TLV> tlvs = message.getTlvs();
     ASSERT_EQ(tlvs.length(), 1);
     PIVector<TLV::DetObj> actualDetObjs = tlvs[0].asDetects();
     for (int i = 0; i < actualDetObjs.length(); i++) {
         ASSERT_TRUE(memcmp(&actualDetObjs[i], &detObj[i], sizeof(detObj[i])) == 0) << "On iteration " << i;
+    }
+}
+
+TEST_F(MMWMessageMessage, MMWMessage_several_tlvs) {
+    MMWMessage message(messageArrTLVs.data(), messageArrTLVs.length());
+    ASSERT_TRUE(message.isValidPacket());
+    PIVector<TLV> tlvs = message.getTlvs();
+    ASSERT_EQ(tlvs.length(), headerTLVs.numTLVs);
+    for (int i = 0; i < tlvs.length(); ++i) {
+        ASSERT_NE(tlvs[i].type(), TLV::Type::INVALID);
+        ASSERT_EQ(tlvs[i].length(), sizeof(TLV::Header));
     }
 }
