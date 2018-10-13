@@ -27,6 +27,9 @@ public:
     TLV(const TLV &tlv): TLV(tlv.buff) {}
     ~TLV();
 
+    /**
+     * Should contains last type with name "INVALID" (needed for TLV class logic)
+     */
     enum Type {
         DETECTED_POINTS = 1,
         CLUSTERS,

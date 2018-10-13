@@ -75,6 +75,10 @@ TEST_F(MMWMessageDetects, TLV_init_not_enoght_input_data_length) {
     ASSERT_EQ(tlv.asTrackingReport().length(), 0);
 }
 
+TEST_F(MMWMessageDetects, TLV_init_input_zero_pointer_zero_len) {
+    EXPECT_EXIT(TLV tlv(nullptr, 0); exit(0),::testing::ExitedWithCode(0),".*");
+}
+
 TEST_F(MMWMessageDetects, TLV_asDetects_zero) {
     TLV tlv(tlvPacket0);
     ASSERT_EQ(tlv.asDetects().length(), 0);

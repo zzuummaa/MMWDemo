@@ -5,7 +5,16 @@
 #include "MMWMessage.h"
 
 TLV::TLV(const uint8_t *tlv_, int maxLength) {
-    int tlvLen = extractTLVLength(tlv_);
+    // TODO check situation when maxLength < sizeof(TLV::Header)
+    int tlvLen;
+    if (maxLength >= sizeof(TLV::Header)) {
+        tlvLen = extractTLVLength(tlv_);
+    } else {
+        header = nullptr;
+        data = nullptr;
+        return;
+    }
+
     if (tlvLen <= maxLength) {
         buff.append(tlv_, tlvLen);
         header = (Header *) buff.data(0);
