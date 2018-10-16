@@ -278,16 +278,6 @@ void MMWaveDevice::run() {
 
         for (int i = 0; i < msg_header->numTLVs; ++i) {
             container.fromTLV(&message.tlv[i]);
-//            switch (message.body.detObj.tlv[i].type) {
-//                case MMWDEMO_OUTPUT_MSG_DETECTED_POINTS:
-//                    detObjs = parseDetectedObj(&message.body.detObj.tlv[i]);
-//
-//                    //piCoutObj << "On frame";
-//
-//                    break;
-//                default:
-//                    break;
-//            }
         }
 
         dataMutex.lock();

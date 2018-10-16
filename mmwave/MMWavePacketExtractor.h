@@ -7,6 +7,7 @@
 
 #include <piobject.h>
 #include <pibytearray.h>
+#include "MMWMessage.h"
 
 class MMWavePacketExtractor : public PIObject {
 	PIOBJECT(MMWavePacketExtractor)
@@ -32,17 +33,24 @@ public:
 	PIByteArray nextPacket();
 	bool hasNextPacket();
 
+	MMWMessage nextPacketM();
+	bool hasNextPacketM();
+
 	enum Condition {
 		WAIT_MAGIC_WORLD,
 		WAIT_HEADER,
 		WAIT_PACK_END
 	};
-	Condition condition = WAIT_MAGIC_WORLD;
+
+	Condition condition() const;
 
 private:
+	Condition condition_;
 	PIQueue<PIByteArray> packetQueue;
+	PIQueue<MMWMessage> packetQueueM;
+	int packetQueueCapacity;
 	PIByteArray byteArray;
-	MmwDemo_output_message_header msg_header;
+	MMWMessage::Header msg_header;
 	PIMutex packetMutex;
 };
 

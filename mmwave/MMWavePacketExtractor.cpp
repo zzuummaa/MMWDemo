@@ -3,60 +3,50 @@
 //
 
 #include <cstdint>
-#include "mmw/mmw_output.h"
 #include "MMWavePacketExtractor.h"
 
-static uint16_t requiredMagicWord[4] = {0x0102, 0x0304, 0x0506, 0x0708};
 PIByteArray requiredMagicWordBA(requiredMagicWord, sizeof(requiredMagicWord));
 
 void MMWavePacketExtractor::onData(uchar *data, int size) {
 	byteArray.append(data, size);
-//	piCout << byteArray.size();
-//	while (byteArray.size() >= 8) {
-//		PIByteArray magicWord = PIByteArray(byteArray.data(0), 8);
-//		piCout << magicWord.toHex();
-//		if (magicWord == requiredMagicWordBA) {
-//			piCout << "!!!!find!!!!";
-//			byteArray.remove(0, 8);
-//		}
-//		byteArray.take_front();
-//	}
-	bool stop = false;
-	while (!stop) {
-		switch (condition) {
+	bool isAllDataHandled = false;
+	while (!isAllDataHandled) {
+		switch (condition_) {
 			case WAIT_MAGIC_WORLD:
 				while (byteArray.size() >= 8) {
 					PIByteArray magicWord = PIByteArray(byteArray.data(0), 8);
 					if (magicWord == requiredMagicWordBA) {
-						condition = WAIT_HEADER;
+						condition_ = WAIT_HEADER;
 						//piCout << "find";
 						break;
 					} else {
 						byteArray.take_front();
 					}
 				}
-				if (byteArray.size() < 8) stop = true;
+				if (byteArray.size() < 8) isAllDataHandled = true;
 			break;
 			case WAIT_HEADER:
-				if (byteArray.size() >= sizeof(MmwDemo_output_message_header)) {
-					memcpy(&msg_header, byteArray.data(0), sizeof(MmwDemo_output_message_header));
-//					msg_header = (MmwDemo_output_message_header*)byteArray.data(0);
-					//piCout << "header" << msg_header.totalPacketLen << msg_header.frameNumber << msg_header.subFrameNumber << msg_header.numDetectedObj << msg_header.version;
-					condition = WAIT_PACK_END;
-				} else {stop = true;}
+				if (byteArray.size() >= sizeof(MMWMessage::Header)) {
+					memcpy(&msg_header, byteArray.data(0), sizeof(MMWMessage::Header));
+					condition_ = WAIT_PACK_END;
+				} else {
+					isAllDataHandled = true;
+				}
 			break;
 			case WAIT_PACK_END:
 				if (byteArray.size() >= msg_header.totalPacketLen) {
 					packetMutex.lock();
+					if (packetQueue.size() >= packetQueueCapacity) packetQueue.take_front();
 					packetQueue.push_back(PIByteArray(byteArray.data(0), msg_header.totalPacketLen));
+					if (packetQueueM.size() >= packetQueueCapacity) packetQueueM.take_front();
+					packetQueueM.push_back(MMWMessage(byteArray.data(), msg_header.totalPacketLen));
 					packetMutex.unlock();
 
 					byteArray.remove(0, msg_header.totalPacketLen);
-					condition = WAIT_MAGIC_WORLD;
-					//piCout << "get packet";
-				} else {stop = true;}
-
-//				onPacket();
+					condition_ = WAIT_MAGIC_WORLD;
+				} else {
+					isAllDataHandled = true;
+				}
 
 				break;
 			default:
@@ -83,6 +73,22 @@ PIByteArray MMWavePacketExtractor::nextPacket() {
 	return nextPacket;
 }
 
-MMWavePacketExtractor::MMWavePacketExtractor() {
-	piCout << "MMWavePacketExtractor initialized";
+bool MMWavePacketExtractor::hasNextPacketM() {
+	packetMutex.lock();
+	bool hasNext = !packetQueueM.isEmpty();
+	packetMutex.unlock();
+	return hasNext;
+}
+
+MMWMessage MMWavePacketExtractor::nextPacketM() {
+	packetMutex.lock();
+	MMWMessage nextPacket = packetQueueM.take_front();
+	packetMutex.unlock();
+	return nextPacket;
+}
+
+MMWavePacketExtractor::MMWavePacketExtractor(): condition_(WAIT_MAGIC_WORLD), packetQueueCapacity(10) {}
+
+MMWavePacketExtractor::Condition MMWavePacketExtractor::condition() const {
+	return condition_;
 }

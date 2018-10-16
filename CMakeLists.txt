@@ -16,7 +16,7 @@ file(GLOB_RECURSE HEADERS "mmwave/*.h")
 file(GLOB_RECURSE CPPS2 "mmwave2/*.cpp")
 file(GLOB_RECURSE HEADERS2 "mmwave2/*.h")
 
-include_directories(${PIP_INCLUDES} ${SMBRICKS_INCLUDES} mmwave)
+include_directories(${PIP_INCLUDES} ${SMBRICKS_INCLUDES} mmwave mmwave2)
 link_directories(${SMBRICKS_LIB_DIR})
 
 add_executable(MMWFunctional MMWFunctional.cpp ${CPPS} ${HEADERS} ${CPPS2} ${HEADERS2} ${CMOCS} ${CCM})
@@ -63,6 +63,10 @@ add_executable(MMWDeviceMOCTest MMWDeviceMOCTest.cpp ${CPPS} ${HEADERS} ${CPPS2}
 target_link_libraries(MMWDeviceMOCTest ${PIP_LIBRARY} ${PIP_CRYPT_LIBRARY} SMBricks_shared SMBricks gtest gmock_main)
 add_test(NAME MMWDeviceMOCTest_test COMMAND SMBlock)
 
-add_executable(MMWMessageTest MMWMessageUnitTests.cpp ${CPPS2} ${HEADERS2})
-target_link_libraries(MMWMessageTest ${PIP_LIBRARY} ${PIP_CRYPT_LIBRARY} SMBricks_shared SMBricks gtest gmock_main)
-add_test(NAME MMWMessageTest_test COMMAND SMBlock)
+add_executable(MMWMessageUnitTests MMWMessageUnitTests.cpp ${CPPS2} ${HEADERS2})
+target_link_libraries(MMWMessageUnitTests ${PIP_LIBRARY} ${PIP_CRYPT_LIBRARY} SMBricks_shared SMBricks gtest gmock_main)
+add_test(NAME MMWMessageUnitTests_test COMMAND SMBlock)
+
+add_executable(MMWPacketExtractorUnitTests MMWPacketExtractorUnitTests.cpp ${CPPS} ${HEADERS} ${CPPS2} ${HEADERS2})
+target_link_libraries(MMWPacketExtractorUnitTests ${PIP_LIBRARY} ${PIP_CRYPT_LIBRARY} SMBricks_shared SMBricks gtest gmock_main)
+add_test(NAME MMWPacketExtractorUnitTests_test COMMAND SMBlock)
