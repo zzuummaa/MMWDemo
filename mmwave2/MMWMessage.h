@@ -6,7 +6,10 @@
 #define CALLBACKS_MMWDATA_H
 
 #include <cstdint>
+#include <pistring.h>
 #include "pibytearray.h"
+#include "picodeinfo.h"
+#include "ccm_callbacks.h"
 
 int extractTLVLength(const uint8_t *tlv);
 int extractNumDetectObjs(const uint8_t *tlvData);
@@ -113,14 +116,14 @@ public:
         int16_t ySize;              /**< cluster size (y direction). */
     };
 
-    inline TLV::Type type() {
+    inline TLV::Type type() const {
         return header != nullptr ? header->type : TLV::Type::INVALID;
     }
 
     /**
      * @return full TLV length (payload size) + (TLV header length) in bytes
      */
-    inline int length() {
+    inline int length() const {
         return header != nullptr ? header->length + sizeof(Header) : 0;
     }
 
@@ -140,6 +143,29 @@ private:
     template<typename T>
     inline void extractObjs(PIVector<T>& vec);
 };
+
+inline PIByteArray & operator >>(PIByteArray & s, TLV & v) {
+    s >> PIByteArray::RawData(&v, sizeof(v));
+    return s;
+}
+
+inline PIByteArray & operator <<(PIByteArray & s, const TLV & v) {
+    s << PIByteArray::RawData(&v, sizeof(v));
+    return s;
+}
+
+inline PIString& operator <<(PIString& s, const TLV & v) {
+    PICodeInfo::EnumInfo * ei = PICodeInfo::enumsInfo->value("TLV::Type");
+    s << "type:" << (ei ? ei->memberName(v.type()) : v.type()) << ",len:" << v.length();
+    return s;
+}
+
+inline PICout operator <<(PICout s, const TLV & v) {
+    PIString str;
+    str << v;
+    s << str;
+    return s;
+}
 
 /**
  * Extract TLV length from TLV header and return (payload size) + (TLV header length) in bytes
@@ -209,6 +235,29 @@ private:
     PIVector<TLV> tlvs;
     bool isValidPacket_;
 };
+
+inline PIByteArray & operator >>(PIByteArray & s, MMWMessage & v) {
+    s >> PIByteArray::RawData(&v, sizeof(v));
+    return s;
+}
+
+inline PIByteArray & operator <<(PIByteArray & s, const MMWMessage & v) {
+    s << PIByteArray::RawData(&v, sizeof(v));
+    return s;
+}
+
+inline PICout operator <<(PICout s, const MMWMessage & v) {
+    PIString str;
+//    str.append().append(v.isValidPacket()).append(",tlvs: ").append();
+    str << "isValidPacket:" << v.isValidPacket() << ",tlvs:[";
+    piForeachC(TLV& tlv, v.getTlvs()) {
+        str << "{" << tlv << "},";
+    }
+    str.take_back();
+    str << "]";
+    s << str;
+    return s;
+}
 
 const uint16_t requiredMagicWord[4] = {0x0102, 0x0304, 0x0506, 0x0708};
 

@@ -7,7 +7,7 @@
 TLV::TLV(const uint8_t *tlv_, int maxLength) {
     // TODO check situation when maxLength < sizeof(TLV::Header)
     int tlvLen;
-    if (maxLength >= sizeof(TLV::Header)) {
+    if (maxLength >= sizeof(TLV::Header) && tlv_ != nullptr) {
         tlvLen = extractTLVLength(tlv_);
     } else {
         header = nullptr;
@@ -90,7 +90,7 @@ TLV::~TLV() {
 
 MMWMessage::MMWMessage(const uint8_t *mmwMessage, int maxSize) {
     isValidPacket_ = false;
-    if (maxSize >= sizeof(MMWMessage::Header)) {
+    if (maxSize >= sizeof(MMWMessage::Header) && mmwMessage != nullptr) {
         if (maxSize >= extractTotalPacketLength(mmwMessage)) {
             isValidPacket_ = true;
         }

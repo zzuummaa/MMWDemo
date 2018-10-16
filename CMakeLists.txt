@@ -11,16 +11,15 @@ set(SMBRICKS_LIB_DIR ${PATH_TO_SMSDK}/lib)
 set(SM_BIN_DIR "C:/Users/Stephan/CLionProjects/Job_SMwin64")
 find_package(PIP REQUIRED)
 
+pip_code_model(CCM "mmwave2/MMWMessage.h" OPTIONS "-Es")
+
 file(GLOB_RECURSE CPPS "mmwave/*.cpp")
 file(GLOB_RECURSE HEADERS "mmwave/*.h")
 file(GLOB_RECURSE CPPS2 "mmwave2/*.cpp")
 file(GLOB_RECURSE HEADERS2 "mmwave2/*.h")
 
-include_directories(${PIP_INCLUDES} ${SMBRICKS_INCLUDES} mmwave mmwave2)
+include_directories(${PIP_INCLUDES} ${SMBRICKS_INCLUDES} ${CMAKE_CURRENT_BINARY_DIR} mmwave mmwave2)
 link_directories(${SMBRICKS_LIB_DIR})
-
-add_executable(MMWFunctional MMWFunctional.cpp ${CPPS} ${HEADERS} ${CPPS2} ${HEADERS2} ${CMOCS} ${CCM})
-target_link_libraries(MMWFunctional ${PIP_LIBRARY} ${PIP_CRYPT_LIBRARY} SMBricks_shared)
 
 include(IncludeGoogleTests.cmake)
 add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR})
@@ -31,19 +30,10 @@ message("-- gmock_SOURCE_DIR: ${gmock_SOURCE_DIR}")
 
 include_directories("${gtest_SOURCE_DIR}/include" "${gmock_SOURCE_DIR}/include")
 
-# Message example
-add_executable(MessageExample MessageExample.cpp ${CPPS} ${HEADERS} ${CPPS2} ${HEADERS2} ${CMOCS} ${CCM})
-target_link_libraries(MessageExample ${PIP_LIBRARY} ${PIP_CRYPT_LIBRARY} SMBricks_shared gtest gmock_main)
-add_test(NAME MessageExample_test COMMAND MessageExample)
-
 # My example
 add_executable(example_my example_my.cpp)
 target_link_libraries(example_my gtest gmock_main)
 add_test(NAME example_my_test COMMAND example_my)
-
-add_executable(simple simple_test.cpp ${CMOCS} ${CCM})
-target_link_libraries(simple ${PIP_LIBRARY} ${PIP_CRYPT_LIBRARY} SMBricks_shared gtest gmock_main)
-add_test(NAME simple_test COMMAND simple)
 
 add_executable(MMWReceive ReceiveMMWDataTest.cpp ${CPPS} ${HEADERS} ${CMOCS} ${CCM})
 target_link_libraries(MMWReceive ${PIP_LIBRARY} ${PIP_CRYPT_LIBRARY} SMBricks_shared gtest gmock_main)
@@ -59,14 +49,19 @@ add_test(NAME SMBlockTest_test COMMAND SMBlock)
 set(TEST_FILES_DIR "${PROJECT_SOURCE_DIR}/test_files")
 configure_file(CmakeDefinitions.h.in ${CMAKE_BINARY_DIR}/generated/CmakeDefinitions.h )
 include_directories( ${CMAKE_BINARY_DIR}/generated/ )
-add_executable(MMWDeviceMOCTest MMWDeviceMOCTest.cpp ${CPPS} ${HEADERS} ${CPPS2} ${HEADERS2} ${CMOCS} ${CCM})
-target_link_libraries(MMWDeviceMOCTest ${PIP_LIBRARY} ${PIP_CRYPT_LIBRARY} SMBricks_shared SMBricks gtest gmock_main)
-add_test(NAME MMWDeviceMOCTest_test COMMAND SMBlock)
 
-add_executable(MMWMessageUnitTests MMWMessageUnitTests.cpp ${CPPS2} ${HEADERS2})
+add_executable(MMWDeviceUnitTest MMWDeviceUnitTests.cpp ${CCM} ${CPPS} ${HEADERS} ${CPPS2} ${HEADERS2} ${CMOCS} ${CCM})
+target_link_libraries(MMWDeviceUnitTest ${PIP_LIBRARY} ${PIP_CRYPT_LIBRARY} SMBricks_shared SMBricks gtest gmock_main)
+add_test(NAME MMWDeviceUnitTest_test COMMAND SMBlock)
+
+add_executable(MMWMessageUnitTests MMWMessageUnitTests.cpp ${CCM} ${CPPS2} ${HEADERS2})
 target_link_libraries(MMWMessageUnitTests ${PIP_LIBRARY} ${PIP_CRYPT_LIBRARY} SMBricks_shared SMBricks gtest gmock_main)
 add_test(NAME MMWMessageUnitTests_test COMMAND SMBlock)
 
-add_executable(MMWPacketExtractorUnitTests MMWPacketExtractorUnitTests.cpp ${CPPS} ${HEADERS} ${CPPS2} ${HEADERS2})
+add_executable(MMWPacketExtractorUnitTests MMWPacketExtractorUnitTests.cpp ${CCM} ${CPPS} ${HEADERS} ${CPPS2} ${HEADERS2})
 target_link_libraries(MMWPacketExtractorUnitTests ${PIP_LIBRARY} ${PIP_CRYPT_LIBRARY} SMBricks_shared SMBricks gtest gmock_main)
 add_test(NAME MMWPacketExtractorUnitTests_test COMMAND SMBlock)
+
+add_executable(MMWDeviceIntegrationTests MMWDeviceIntegrationTests.cpp ${CCM} ${CPPS} ${HEADERS} ${CPPS2} ${HEADERS2})
+target_link_libraries(MMWDeviceIntegrationTests ${PIP_LIBRARY} ${PIP_CRYPT_LIBRARY} SMBricks_shared SMBricks gtest gmock_main)
+add_test(NAME MMWDeviceIntegrationTests_test COMMAND SMBlock)
