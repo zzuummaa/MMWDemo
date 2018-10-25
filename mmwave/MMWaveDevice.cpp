@@ -79,20 +79,13 @@ DetObjFrame parseDetectedObj(MmwDemo_msgTlv* tlv) {
 }
 
 MMWaveDevice::MMWaveDevice(): MMWaveDevice("ser://COM3:115200", "ser://COM4:921600") {
-
 }
 
 MMWaveDevice::MMWaveDevice(const PIString &configPortPath, const PIString &dataPortPath) {
     configPort.reset(PIIODevice::createFromFullPath(configPortPath));
     dataPort.reset(PIIODevice::createFromFullPath(dataPortPath));
-
-    thread.setThreadSafe(false);
-    CONNECTU(&thread, started, this, run);
-    isOpen = false;
-
     CONNECTU(dataPort.get(), threadedReadEvent, &packetExtractor, onData);
-
-    piCout << "MMWaveDevice initialized";
+    isOpen = false;
 }
 
 bool MMWaveDevice::execDeviceCommand(PIString inStr) {
@@ -105,7 +98,7 @@ bool MMWaveDevice::execDeviceCommand(PIString inStr) {
     inStr.append("\n");
 
     PIByteArray data = inStr.toByteArray();
-    if (configPort.get()->write(data.data(), data.size_s()) == data.size_s()) {
+    if (configPort->write(data.data(), data.size_s()) != data.size_s()) {
         piCoutObj << "Send command fail";
         return false;
     }
@@ -139,13 +132,8 @@ bool MMWaveDevice::execDeviceCommand(PIString inStr) {
 }
 
 bool MMWaveDevice::configureDevice(PIString& config) {
-    if (!deviceMutex.tryLock()) {
-        return false;
-    }
-    
     if (!configPort->isOpened()) {
         if (!configPort->open()) {
-            deviceMutex.unlock();
             return false;
         }
     }
@@ -158,142 +146,17 @@ bool MMWaveDevice::configureDevice(PIString& config) {
         iter++;
 
         if (!execDeviceCommand(inStr)) {
-            deviceMutex.unlock();
             return false;
         }
     }
 
-    if (!configPort->close()) {
-        return false;
-    }
-
-    deviceMutex.unlock();
-    return true;
-}
-
-bool MMWaveDevice::open() {
-    if (!configPort->open() || !dataPort->open()) {
-        return false;
-    }
-
-    isOpen = true;
-    return true;
-}
-
-bool MMWaveDevice::close() {
-    bool status = true;
-
-    if (!dataPort->isClosed()) {
-        if (!dataPort->close()) {
-            piCoutObj << "data port close error";
-            status = false;
-        }
-    }
-
-    if (!configPort->isClosed()) {
-        if (!configPort->close()) {
-            piCoutObj << "config port close error";
-            status = false;
-        }
-    }
-
-    isOpen = false;
-    return true;
-}
-
-bool MMWaveDevice::isOpened() {
-    return isOpen;
-}
-
-bool MMWaveDevice::start() {
-    if (!configureToStart()) {
-        piCoutObj << "Can't configure to start device";
-        return false;
-    }
-
-    if (!dataPort->isOpened()) {
-        if (!dataPort->open()) {
-            piCoutObj << "Can't open data port";
-            return false;
-        }
-    }
-
-    if (!thread.startOnce()) {
-        piCoutObj << "Can't start thread";
-        return false;
-    }
-
-    dataPort->startThreadedRead();
-
-    return true;
-}
-
-bool MMWaveDevice::waitForFinish(int time_out) {
-    return thread.waitForFinish(time_out);
-}
-
-void MMWaveDevice::lock() {
-    dataMutex.lock();
-}
-
-void MMWaveDevice::unlock() {
-    dataMutex.unlock();
-}
-
-void MMWaveDevice::run() {
-    //piCoutObj << "run() executed";
-
-    uint32_t prevFrameNumber = 0;
-
-    while (!thread.isStopping()) {
-        if (!packetExtractor.hasNextPacket()) {
-            piMSleep(10);
-            continue;
-        }
-
-        PIByteArray buffer = packetExtractor.nextPacket();
-
-        MmwDemo_detInfoMsg message;
-        if (!parsePacket(buffer.data(), &message)) {
-            piCout << "can't parse packet";
-            continue;
-        }
-
-        MmwDemo_output_message_header* msg_header = &message.header;
-
-        if (prevFrameNumber != 0) {
-            //piCoutObj << "Current frameNumber: " << msg_header->frameNumber;
-            if (msg_header->frameNumber == prevFrameNumber+1) {
-                prevFrameNumber++;
-            } else {
-                piCoutObj << "Warning: skipped packets from " << prevFrameNumber << "to" << msg_header->frameNumber-1;
-                prevFrameNumber = msg_header->frameNumber;
-            }
-        } else {
-            prevFrameNumber = msg_header->frameNumber;
-        }
-
-        MMWaveDataContainer container;
-		container.type = (msg_header->subFrameNumber == 0 ? MMWaveDataContainer::Near : MMWaveDataContainer::Far);
-
-        for (int i = 0; i < msg_header->numTLVs; ++i) {
-            container.fromTLV(&message.tlv[i]);
-        }
-
-        dataMutex.lock();
-        dataQueue.push_back(container);
-        dataMutex.unlock();
-    }
-
-    //piCoutObj << "Thread stopped";
+    return configPort->close();
 
 }
 
-void MMWaveDevice::interrupt() {
-//    if (!configureToStop()) {
-//        piCoutObj << "Can't stop device";
-//    }
-    thread.stop();
+bool MMWaveDevice::startDev() {
+    setState(START);
+    return start(false);
 }
 
 std::shared_ptr<PIIODevice> MMWaveDevice::getConfigPort() {
@@ -305,63 +168,145 @@ std::shared_ptr<PIIODevice> MMWaveDevice::getDataPort() {
 }
 
 bool MMWaveDevice::configureToStart() {
-    deviceMutex.lock();
-
     if (!configPort->isOpened()) {
         if (!configPort->open()) {
-            deviceMutex.unlock();
             return false;
         }
     }
 
     if ( /*!execDeviceCommand("advFrameCfg")
       ||*/ !execDeviceCommand("sensorStart")) {
-        deviceMutex.unlock();
         return false;
     }
 
-    if (!configPort->close()) {
-        deviceMutex.unlock();
-        return false;
-    }
+    return configPort->close();
 
-    deviceMutex.unlock();
-    return true;
 }
 
 bool MMWaveDevice::configureToStop() {
-    deviceMutex.lock();
-
     if (!configPort->isOpened()) {
         if (!configPort->open()) {
-            deviceMutex.unlock();
             return false;
         }
     }
 
     if (!execDeviceCommand("sensorStop")) {
-        deviceMutex.unlock();
         return false;
+    }
+
+    return configPort->close();
+
+}
+
+MMWavePacketExtractor &MMWaveDevice::getPacketExtractor() {
+    return packetExtractor;
+}
+
+void MMWaveDevice::run() {
+    mutex.lock();
+    State state = this->state;
+    mutex.unlock();
+
+    switch (state) {
+    case START: onStart(); break;
+    case CONFIGURE: onConfigure(); break;
+    case READ_DATA: onReadData(); break;
+    case STOP: onStop(); break;
+    case ERROR: onStop(); break;
+    default: piCoutObj << "Unknown state";
+    }
+}
+
+void MMWaveDevice::onStart() {
+    mutex.lock();
+
+    if (!config.isEmpty()) {
+        state = CONFIGURE;
+        return;
+    }
+
+    if (!dataPort->open()) {
+        setState(ERROR);
+        return;
+    } else {
+        dataPort->startThreadedRead();
+        state = READ_DATA;
+    }
+
+    mutex.unlock();
+}
+
+void MMWaveDevice::onConfigure() {
+    bool isSuccess = true;
+
+    if (!configPort->open()) {
+        setState(ERROR);
+        return;
+    }
+
+    mutex.lock();
+    PIStringList lines = config.split("\n");
+    mutex.unlock();
+    PIDeque<PIString>::iterator iter = lines.begin();
+
+    while (iter != lines.end()) {
+        PIString inStr = *iter;
+        iter++;
+
+        if (!execDeviceCommand(inStr)) {
+            isSuccess = false;
+        }
     }
 
     if (!configPort->close()) {
-        deviceMutex.unlock();
-        return false;
+        setState(ERROR);
+        return;
     }
 
-    deviceMutex.unlock();
+    msleep(1500);
+    if (!dataPort->open()) {
+        setState(ERROR);
+        return;
+    } else {
+        dataPort->startThreadedRead();
+        state = READ_DATA;
+    }
+}
+
+void MMWaveDevice::onReadData() {
+    if (getState() == READ_DATA) {
+        msleep(25);
+    }
+
+    if (!dataPort->isOpened()) setState(ERROR);
+}
+
+void MMWaveDevice::onStop() {
+    if (!dataPort->close()) setState(ERROR);
+    stop();
+}
+
+MMWaveDevice::State MMWaveDevice::getState() {
+    mutex.lock();
+    State state = this->state;
+    mutex.unlock();
+    return state;
+}
+
+void MMWaveDevice::setState(MMWaveDevice::State state) {
+    mutex.lock();
+    this->state = state;
+    mutex.unlock();
+}
+
+bool MMWaveDevice::stopDev() {
+    setState(STOP);
     return true;
 }
 
-bool MMWaveDevice::isReadyData() {
-    bool isReady = !dataQueue.isEmpty();
-    return isReady;
-}
-
-MMWaveDataContainer MMWaveDevice::getData() {
-    return dataQueue.take_front();
-}
-
-void MMWaveDevice::clearDataQueue() {
-    dataQueue.clear();
+void MMWaveDevice::setConfig(const PIString & config) {
+    mutex.lock();
+    this->config.clear();
+    this->config.append(config);
+    mutex.unlock();
 }

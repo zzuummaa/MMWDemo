@@ -38,9 +38,19 @@ bool parsePacket(uint8_t* buff, MmwDemo_detInfoMsg* message);
 DetObjFrame parseDetectedObj(MmwDemo_msgTlv* tlv);
 void freeMemory(MmwDemo_message message);
 
-class MMWaveDevice : public PIObject {
+
+class MMWaveDevice : public PIThread {
 PIOBJECT(MMWaveDevice)
 public:
+
+	enum State {
+		START,
+		CONFIGURE,
+		READ_DATA,
+		STOP,
+		ERROR
+	};
+
 	MMWaveDevice();
 
 	MMWaveDevice(const PIString &configPortPath, const PIString &dataPortPath);
@@ -68,40 +78,38 @@ public:
 	 */
 	bool configureToStop();
 
+	void setConfig(const PIString& config);
 
-	bool open();
-	bool close();
-	bool isOpened();
-	bool start();
+	bool startDev();
+	bool stopDev();
 
-	bool waitForFinish(int time_out = -1);
-	void lock();
-	void unlock();
-
-	bool isReadyData();
-	MMWaveDataContainer getData();
-	void clearDataQueue();
+	MMWavePacketExtractor &getPacketExtractor();
 
 	std::shared_ptr<PIIODevice> getConfigPort();
 	std::shared_ptr<PIIODevice> getDataPort();
 
 	bool execDeviceCommand(PIString inStr);
 
-	EVENT_HANDLER0(void, interrupt);
+    State getState();
 
-	EVENT(threadStop)
+protected:
+	void run() override;
 
 private:
+	State state;
+	PIMutex mutex;
+	PIString config;
 	MMWavePacketExtractor packetExtractor;
-	PIThread thread;
 	std::shared_ptr<PIIODevice> configPort;
 	std::shared_ptr<PIIODevice> dataPort;
-	PIQueue<MMWaveDataContainer> dataQueue;
 	bool isOpen;
-	PIMutex dataMutex;
-	PIMutex deviceMutex;
 
-	EVENT_HANDLER0(void, run);
+	void onStart();
+	void onConfigure();
+	void onReadData();
+	void onStop();
+
+    void setState(State state);
 };
 
 #endif //SMSDK_MMWAVEDEVICE_H

@@ -80,3 +80,15 @@ TEST_F(MMWPacketExtractor, MMWMessage_onData_packet) {
     ASSERT_TRUE(message.isValidPacket());
     ASSERT_EQ(extractor.condition(), MMWavePacketExtractor::WAIT_MAGIC_WORLD);
 }
+
+TEST_F(MMWPacketExtractor, MMWMessage_onData_packets) {
+    PIByteArray packets;
+    packets.append(packet).append(packet);
+    extractor.onData(packets.data(), packets.size());
+    for (int i = 0; i < 2; ++i) {
+        ASSERT_TRUE(extractor.hasNextPacketM()) << "on iteration " << i;
+        MMWMessage message = extractor.nextPacketM();
+        ASSERT_TRUE(message.isValidPacket()) << "on iteration " << i;
+    }
+    ASSERT_EQ(extractor.condition(), MMWavePacketExtractor::WAIT_MAGIC_WORLD);
+}

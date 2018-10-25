@@ -35,6 +35,23 @@ TEST(MMWaveDevice_test, smart_pointers) {
 
 TEST(MMWaveDevice_test, readData) {
     PIString configPortName = PIString("file://") + TEST_FILES_DIR + "/empty.bin";
-    PIString dataPortName = PIString("file://") + TEST_FILES_DIR + "/empty.bin";
+    PIString dataPortName = PIString("file://") + TEST_FILES_DIR + "/data.bin";
     MMWaveDevice device(configPortName, dataPortName);
+
+    ASSERT_TRUE(device.startDev());
+    piSleep(0.1);
+
+    int packetCount = 0;
+    piCout << "";
+    while (device.getPacketExtractor().hasNextPacketM()) {
+        MMWMessage message = device.getPacketExtractor().nextPacketM();
+        ASSERT_TRUE(message.isValidPacket());
+        piCout << message;
+        packetCount++;
+    }
+
+    EXPECT_NE(packetCount, 0);
+    if (packetCount != 0) piCout << "packetCount:" << packetCount;
+
+    ASSERT_TRUE(device.stopDev());
 }
