@@ -9,14 +9,15 @@
 #include "mmwave/MMWaveDevice.h"
 #include "MMWaveProperties.h"
 
-TEST(MMWaveDevice_test, srr) {
+TEST(MMWaveDevice_test, mmw) {
     MMWaveDevice device("ser://COM3:115200", "ser://COM4:921600");
 
-//    device.setConfig("sensorStart\n");
+    MMWaveProperties properties;
+    device.setConfig(properties.toProfile().append("sensorStart\n"));
     ASSERT_TRUE(device.startDev());
 
     int packetCount = 0;
-    while (packetCount < 50) {
+    while (packetCount < 10) {
         if (!device.getPacketExtractor().hasNextPacketM()) {
             piMSleep(20);
             continue;

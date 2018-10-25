@@ -84,7 +84,7 @@ MMWaveDevice::MMWaveDevice(): MMWaveDevice("ser://COM3:115200", "ser://COM4:9216
 MMWaveDevice::MMWaveDevice(const PIString &configPortPath, const PIString &dataPortPath) {
     configPort.reset(PIIODevice::createFromFullPath(configPortPath));
     dataPort.reset(PIIODevice::createFromFullPath(dataPortPath));
-    CONNECTU(dataPort.get(), threadedReadEvent, &packetExtractor, onData);
+    //CONNECTU(dataPort.get(), threadedReadEvent, &packetExtractor, onData);
     isOpen = false;
 }
 
@@ -222,14 +222,14 @@ void MMWaveDevice::onStart() {
 
     if (!config.isEmpty()) {
         state = CONFIGURE;
+        mutex.unlock();
         return;
     }
 
     if (!dataPort->open()) {
-        setState(ERROR);
-        return;
+        state = ERROR;
     } else {
-        dataPort->startThreadedRead();
+//        dataPort->startThreadedRead();
         state = READ_DATA;
     }
 
@@ -263,22 +263,20 @@ void MMWaveDevice::onConfigure() {
         return;
     }
 
-    msleep(1500);
+    //msleep(1500);
     if (!dataPort->open()) {
         setState(ERROR);
         return;
     } else {
-        dataPort->startThreadedRead();
+//        dataPort->startThreadedRead();
         state = READ_DATA;
     }
 }
 
 void MMWaveDevice::onReadData() {
-    if (getState() == READ_DATA) {
-        msleep(25);
-    }
-
     if (!dataPort->isOpened()) setState(ERROR);
+    PIByteArray data = dataPort->read(4096);
+    packetExtractor.onData(data.data(), data.size());
 }
 
 void MMWaveDevice::onStop() {
