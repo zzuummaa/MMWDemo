@@ -7,6 +7,8 @@
 
 #include <cstdint>
 #include <pistring.h>
+#include <pimathcomplex.h>
+#include <functional>
 #include "pibytearray.h"
 #include "picodeinfo.h"
 #include "ccm_callbacks.h"
@@ -135,6 +137,9 @@ public:
     PIVector<ClusterReport> asClusteringReport();
     PIVector<TrackReport> asTrackingReport();
 
+    PIVector<PIVector<complexd>> asAzimuthStaticHeatmap(int rangeFFTSize = 256, int numOfVirtAntennas = 8);
+    PIVector<PIVector<float>> asRangeDopplerHeatmap(int rangeFFTSize = 256, int dopplerFFTSize = 32);
+    PIVector<PIVector<float>> asRangeAzimuthHeatmap(int rangeFFTSize = 256, int numOfVirtAntennas = 8);
 private:
     PIByteArray buff;
     Header* header;
@@ -142,6 +147,9 @@ private:
 
     template<typename T>
     inline void extractObjs(PIVector<T>& vec);
+
+    template<typename R, typename T>
+    void extractDataToMat(T* data, PIVector<PIVector<R>>& dst, int rows = 0, int cols = 0, std::function<R(T*)> convert = [](T* src) { return *((R*)src); });
 };
 
 inline PIByteArray & operator >>(PIByteArray & s, TLV & v) {

@@ -2,6 +2,8 @@
 // Created by Stephan on 21.06.2018.
 //
 
+#include <stdexcept>
+#include <mmw/sys_common.h>
 #include "MMWMessage.h"
 
 TLV::TLV(const uint8_t *tlv_, int maxLength) {
@@ -81,6 +83,53 @@ PIVector<TLV::TrackReport> TLV::asTrackingReport() {
         extractObjs(trackingReport);
     }
     return trackingReport;
+}
+
+template<typename R, typename T>
+void TLV::extractDataToMat(T* data, PIVector<PIVector<R>>& dst, int rows, int cols, std::function<R(T*)> convert) {
+    if (rows == 0 || cols == 0) {
+        throw std::invalid_argument("vecToMat has zero args rows & cols.");
+    }
+
+    T* p = data;
+    for (int i = 0; i < rows; ++i) {
+        PIVector<R> row;
+        for (int j = 0; j < cols; ++j) {
+            row.push_back(convert(p));
+            p++;
+        }
+        dst.push_back(row);
+    }
+}
+
+PIVector<PIVector<complexd>> TLV::asAzimuthStaticHeatmap(int rangeFFTSize, int numOfVirtAntennas) {
+    PIVector<PIVector<complexd>> heatMap;
+    uint32_t requiredDataLen = rangeFFTSize * numOfVirtAntennas * sizeof(cmplx16ImRe_t);
+    if (type() == TLV::Type::AZIMUT_STATIC_HEAT_MAP && requiredDataLen == header->length) {
+        std::function<complexd(cmplx16ImRe_t*)> convFun = [](cmplx16ImRe_t* src) -> complexd { return complexd(src->real, src->imag); };
+        extractDataToMat((cmplx16ImRe_t*)data, heatMap, rangeFFTSize, numOfVirtAntennas, convFun);
+    }
+    return heatMap;
+}
+
+PIVector<PIVector<float>> TLV::asRangeDopplerHeatmap(int rangeFFTSize, int dopplerFFTSize) {
+    PIVector<PIVector<float>> heatMap;
+    uint32_t requiredDataLen = rangeFFTSize * dopplerFFTSize * sizeof(uint16_t);
+    if (type() == TLV::Type::RANGE_DOPPLER_HEAT_MAP && requiredDataLen == header->length) {
+        std::function<float(uint16_t*)> convFun = [](uint16_t* src) -> float { return (float)*src; };
+        extractDataToMat((uint16_t*)data, heatMap, rangeFFTSize, dopplerFFTSize, convFun);
+    }
+    return heatMap;
+}
+
+PIVector<PIVector<float>> TLV::asRangeAzimuthHeatmap(int rangeFFTSize, int numOfVirtAntennas) {
+    PIVector<PIVector<float>> heatMap;
+    uint32_t requiredDataLen = rangeFFTSize * numOfVirtAntennas * sizeof(cmplx16ImRe_t);
+    if (type() == TLV::Type::RANGE_AZIMUT_HEAT_MAP && requiredDataLen == header->length) {
+        std::function<float(cmplx16ImRe_t*)> convFun = [](cmplx16ImRe_t* src) -> float { return (float)abs(complexd(src->real, src->imag)); };
+        extractDataToMat((cmplx16ImRe_t*)data, heatMap, rangeFFTSize, numOfVirtAntennas, convFun);
+    }
+    return heatMap;
 }
 
 TLV::~TLV() {

@@ -3,14 +3,14 @@
 //
 
 #include <gtest/gtest.h>
+#include <mmw/sys_common.h>
 #include "pivector.h"
 #include "mmwave2/MMWMessage.h"
 
 class MMWMessageTLV : public ::testing::Test
 {
 protected:
-    void SetUp()
-    {
+    void SetUp() {
         header0.length = sizeof(TLV::DataObjDescr);
         header0.type = TLV::Type::DETECTED_POINTS;
         descr0.xyzQFormat = 1;
@@ -81,6 +81,7 @@ TEST_F(MMWMessageTLV, TLV_init_input_zero_pointer_zero_len) {
 
 TEST_F(MMWMessageTLV, TLV_asDetects_zero) {
     TLV tlv(tlvPacket0);
+    ASSERT_EQ(tlv.type(), TLV::Type::DETECTED_POINTS);
     ASSERT_EQ(tlv.asDetects().length(), 0);
 }
 
@@ -105,6 +106,103 @@ TEST_F(MMWMessageTLV, TLV_asDetects_non_detect_type) {
         TLV tlv(tlvPacket2);
         ASSERT_EQ(tlv.asDetects().length(), 0) << "On iteration " << i;
     }
+}
+
+TEST_F(MMWMessageTLV, TLV_asAzimuthStaticHeatmap_zero) {
+    header0.length = 0;
+    header0.type = TLV::Type::AZIMUT_STATIC_HEAT_MAP;
+    tlvPacket0.clear();
+    tlvPacket0.append(&header0, sizeof(header0));
+    TLV tlv(tlvPacket0);
+    ASSERT_EQ(tlv.type(), TLV::Type::AZIMUT_STATIC_HEAT_MAP);
+    ASSERT_EQ(tlv.asAzimuthStaticHeatmap().size(), 0);
+}
+
+TEST_F(MMWMessageTLV, TLV_asAzimuthStaticHeatmap_empty) {
+    TLV tlv;
+    ASSERT_EQ(tlv.asAzimuthStaticHeatmap().size(), 0);
+    // TODO
+}
+
+TEST_F(MMWMessageTLV, TLV_asAzimuthStaticHeatmap_non_empty) {
+    PIVector<PIVector<complexd>> reqVec;
+    PIByteArray data;
+    int rangeFFTSize = 256;
+    int numOfVirtAnt = 8;
+    for (int i = 0; i < rangeFFTSize; ++i) {
+        PIVector<complexd> row;
+        for (int j = 0; j < numOfVirtAnt; ++j) {
+            cmplx16ImRe_t val = {(int16_t)i, (int16_t)j};
+            data.append(&val, sizeof(val));
+            row.push_back(complexd(val.real, val.imag));
+        }
+        reqVec.push_back(row);
+    }
+    header2.type = TLV::Type::AZIMUT_STATIC_HEAT_MAP;
+    header2.length = rangeFFTSize * numOfVirtAnt * sizeof(cmplx16ImRe_t);
+
+    tlvPacket2.clear();
+    tlvPacket2.append(&header2, sizeof(header2));
+    tlvPacket2.append(data);
+
+    TLV tlv(tlvPacket2);
+    PIVector<PIVector<complexd>> vec = tlv.asAzimuthStaticHeatmap(rangeFFTSize, numOfVirtAnt);
+    ASSERT_EQ(vec.size(), reqVec.size());
+    ASSERT_TRUE(vec == reqVec);
+}
+
+TEST_F(MMWMessageTLV, TLV_asRangeDopplerHeatmap_non_empty) {
+    PIVector<PIVector<float>> reqVec;
+    PIByteArray data;
+    int rangeFFTSize = 256;
+    int dopplerFFTSize = 32;
+    for (int i = 0; i < rangeFFTSize; ++i) {
+        PIVector<float> row;
+        for (int j = 0; j < dopplerFFTSize; ++j) {
+            uint16_t val = i + j;
+            data.append(&val, sizeof(val));
+            row.push_back(val);
+        }
+        reqVec.push_back(row);
+    }
+    header2.type = TLV::Type::RANGE_DOPPLER_HEAT_MAP;
+    header2.length = rangeFFTSize * dopplerFFTSize * sizeof(uint16_t);
+
+    tlvPacket2.clear();
+    tlvPacket2.append(&header2, sizeof(header2));
+    tlvPacket2.append(data);
+
+    TLV tlv(tlvPacket2);
+    PIVector<PIVector<float>> vec = tlv.asRangeDopplerHeatmap(rangeFFTSize, dopplerFFTSize);
+    ASSERT_EQ(vec.size(), reqVec.size());
+    ASSERT_TRUE(vec == reqVec);
+}
+
+TEST_F(MMWMessageTLV, TLV_asAzimuthRangeHeatmap_non_empty) {
+    PIVector<PIVector<float>> reqVec;
+    PIByteArray data;
+    int rangeFFTSize = 256;
+    int numOfVirtAnt = 8;
+    for (int i = 0; i < rangeFFTSize; ++i) {
+        PIVector<float> row;
+        for (int j = 0; j < numOfVirtAnt; ++j) {
+            cmplx16ImRe_t val = {(int16_t)i, (int16_t)j};
+            data.append(&val, sizeof(val));
+            row.push_back((float)abs(complexd(val.real, val.imag)));
+        }
+        reqVec.push_back(row);
+    }
+    header2.type = TLV::Type::RANGE_AZIMUT_HEAT_MAP;
+    header2.length = rangeFFTSize * numOfVirtAnt * sizeof(cmplx16ImRe_t);
+
+    tlvPacket2.clear();
+    tlvPacket2.append(&header2, sizeof(header2));
+    tlvPacket2.append(data);
+
+    TLV tlv(tlvPacket2);
+    PIVector<PIVector<float>> vec = tlv.asRangeAzimuthHeatmap(rangeFFTSize, numOfVirtAnt);
+    ASSERT_EQ(vec.size(), reqVec.size());
+    ASSERT_TRUE(vec == reqVec);
 }
 
 TEST_F(MMWMessageTLV, TLV_is_data_local_copy){
