@@ -12,83 +12,25 @@
 #define MMW_NUM_ANGLE_BINS 64
 #define PI 3.14159265359
 
-void freeMemory(MmwDemo_message message) {
-    for (int i = 0; i < message.body.detObj.header.numTLVs; ++i) {
-        uint8_t* p = reinterpret_cast<uint8_t *>(message.body.detObj.tlv[i].address);
-        delete[] p;
-    }
-}
-
-bool parsePacket(uint8_t* buff, MmwDemo_detInfoMsg* message) {
-    static int32_t packetCount = 0;
-    packetCount++;
-
-    memcpy(&message->header, buff, sizeof(MmwDemo_output_message_header_t));
-
-    uint8_t* buffTmp = buff;
-
-    buff += sizeof(MmwDemo_output_message_header_t);
-    for (int i = 0; i < message->header.numTLVs; ++i) {
-        MmwDemo_output_message_tl* message_tl = (MmwDemo_output_message_tl*)buff;
-        buff += sizeof(MmwDemo_output_message_tl);
-
-        message->tlv[i].length = message_tl->length;
-        message->tlv[i].type = message_tl->type;
-
-        if (message->tlv[i].length > message->header.totalPacketLen) {
-            message->tlv[i].length = 0;
-            message_tl->length = 0;
-            break;
-        }
-
-        //uint8_t* address = new uint8_t[message_tl->length];
-        message->tlv[i].address = reinterpret_cast<std::uintptr_t>(buff);
-        //memcpy(address, buff, message_tl->length);
-        buff += message_tl->length;
-    }
-
-    int countedPacketLen = (int)(buff - buffTmp);
-    countedPacketLen += countedPacketLen % 32 == 0 ? 0 : 32 - countedPacketLen % 32;
-    if (countedPacketLen != message->header.totalPacketLen) {
-        //piCout << "error parse packet";
-        return false;
-    }
-    return true;
-}
-
 uint32_t getDetectedObjCount(MmwDemo_msgTlv* tlv) {
     MmwDemo_output_message_dataObjDescr* dataObjDescr
             = reinterpret_cast<MmwDemo_output_message_dataObjDescr *>(tlv->address);
     return dataObjDescr->numDetetedObj;
 }
 
-DetObjFrame parseDetectedObj(MmwDemo_msgTlv* tlv) {
-    DetObjFrame detObjc;
-    uint8_t* p = reinterpret_cast<uint8_t *>(tlv->address);
-
-    uint32_t detObjCount = ((MmwDemo_output_message_dataObjDescr*)p)->numDetetedObj;
-    p += sizeof(MmwDemo_output_message_dataObjDescr);
-
-    for (int i = 0; i < detObjCount; ++i) {
-        MmwDemo_detectedObj* detectedObj = (MmwDemo_detectedObj*)p;
-        detObjc.push_back(*detectedObj);
-        p += sizeof(MmwDemo_detectedObj);
-    }
-
-    return detObjc;
-}
-
 MMWaveDevice::MMWaveDevice(): MMWaveDevice("ser://COM3:115200", "ser://COM4:921600") {
 }
 
-MMWaveDevice::MMWaveDevice(const PIString &configPortPath, const PIString &dataPortPath) {
-    configPort.reset(PIIODevice::createFromFullPath(configPortPath));
-    dataPort.reset(PIIODevice::createFromFullPath(dataPortPath));
+MMWaveDevice::MMWaveDevice(PIIODevice *configPort_, PIIODevice *dataPort_) {
+    configPort.reset(configPort_);
+    dataPort.reset(dataPort_);
     //CONNECTU(dataPort.get(), threadedReadEvent, &packetExtractor, onData);
-    isOpen = false;
 }
 
-bool MMWaveDevice::execDeviceCommand(PIString inStr) {
+MMWaveDevice::MMWaveDevice(const PIString &configPortPath, const PIString &dataPortPath):
+        MMWaveDevice(PIIODevice::createFromFullPath(configPortPath), PIIODevice::createFromFullPath(dataPortPath)) {}
+
+bool MMWaveDevice::execDeviceCommand(PIString inStr, PIStringList* response) {
     if (inStr.back().toConsole1Byte() == '\n') {
         inStr = inStr.cutRight(1);
     }
@@ -109,15 +51,19 @@ bool MMWaveDevice::execDeviceCommand(PIString inStr) {
     //piCout << "Sent to device: " << PIString("'").append(inStr).append("'");
 
     PIString outStr;
-    if (configPort->fullPathPrefix() == "ser") {
-        outStr = ((PISerial*)configPort.get())->readData(100, 100);
-    } else if (configPort->fullPathPrefix() == "file") {
-        // TODO make usable logic
-        outStr = configPort->read(5000);
-    } else {
-        piCoutObj << "Config port prefix '" << configPort->fullPathPrefix() << "' is invalid";
-        return false;
-    }
+    do {
+        outStr.append(configPort->read(200));
+    } while (!outStr.endsWith(":/>"));
+
+//    if (configPort->fullPathPrefix() == "ser") {
+//        outStr = ((PISerial*)configPort.get())->readData(100, 100);
+//    } else if (configPort->fullPathPrefix() == "file") {
+//        // TODO make usable logic
+//        outStr = configPort->read(5000);
+//    } else {
+//        piCoutObj << "Config port prefix '" << configPort->fullPathPrefix() << "' is invalid";
+//        return false;
+//    }
 
     //outStr = PIString("'").append(outStr).append("'");
     piCout << outStr;
@@ -125,77 +71,29 @@ bool MMWaveDevice::execDeviceCommand(PIString inStr) {
     PIStringList list = outStr.split("\n");
     for (int i = 0; i < list.size_s(); ++i) {
         PIString str = list[i].trim();
-        if (str == "Done") return true;
+        if (str == "Done") {
+            if (response != nullptr) {
+                *response = list;
+            }
+            return true;
+        }
     }
 
     return false;
 }
 
-bool MMWaveDevice::configureDevice(PIString& config) {
-    if (!configPort->isOpened()) {
-        if (!configPort->open()) {
-            return false;
-        }
-    }
-    
-    PIStringList lines = config.split("\n");
-    PIDeque<PIString>::iterator iter = lines.begin();
-
-    while (iter != lines.end()) {
-        PIString inStr = *iter;
-        iter++;
-
-        if (!execDeviceCommand(inStr)) {
-            return false;
-        }
-    }
-
-    return configPort->close();
-
-}
-
 bool MMWaveDevice::startDev() {
     setState(START);
+    onStateChange(START);
     return start(false);
 }
 
-std::shared_ptr<PIIODevice> MMWaveDevice::getConfigPort() {
-    return configPort;
+PIIODevice* MMWaveDevice::getConfigPort() {
+    return configPort.get();
 }
 
-std::shared_ptr<PIIODevice> MMWaveDevice::getDataPort() {
-    return dataPort;
-}
-
-bool MMWaveDevice::configureToStart() {
-    if (!configPort->isOpened()) {
-        if (!configPort->open()) {
-            return false;
-        }
-    }
-
-    if ( /*!execDeviceCommand("advFrameCfg")
-      ||*/ !execDeviceCommand("sensorStart")) {
-        return false;
-    }
-
-    return configPort->close();
-
-}
-
-bool MMWaveDevice::configureToStop() {
-    if (!configPort->isOpened()) {
-        if (!configPort->open()) {
-            return false;
-        }
-    }
-
-    if (!execDeviceCommand("sensorStop")) {
-        return false;
-    }
-
-    return configPort->close();
-
+PIIODevice* MMWaveDevice::getDataPort() {
+    return dataPort.get();
 }
 
 MMWavePacketExtractor &MMWaveDevice::getPacketExtractor() {
@@ -204,17 +102,22 @@ MMWavePacketExtractor &MMWaveDevice::getPacketExtractor() {
 
 void MMWaveDevice::run() {
     mutex.lock();
-    State state = this->state;
+    State stateBefore = this->state;
     mutex.unlock();
 
-    switch (state) {
+    switch (stateBefore) {
     case START: onStart(); break;
     case CONFIGURE: onConfigure(); break;
     case READ_DATA: onReadData(); break;
     case STOP: onStop(); break;
-    case ERROR: onStop(); break;
+    case ERROR: break;
     default: piCoutObj << "Unknown state";
     }
+
+    mutex.lock();
+    State stateAfter = this->state;
+    mutex.unlock();
+    if (stateBefore != stateAfter) onStateChange(stateAfter);
 }
 
 void MMWaveDevice::onStart() {
@@ -237,24 +140,44 @@ void MMWaveDevice::onStart() {
 }
 
 void MMWaveDevice::onConfigure() {
-    bool isSuccess = true;
-
     if (!configPort->open()) {
         setState(ERROR);
         return;
     }
 
+    PIStringList versionResp;
+    if (!execDeviceCommand("version\n", &versionResp)) {
+        setState(ERROR);
+        return;
+    }
+    PIString sdkVersionName = "mmWave SDK Version";
+    for (PIDeque<PIString>::iterator iter = versionResp.begin(); iter != versionResp.end(); iter++) {
+        PIString str = *iter;
+        if (str.trimmed().startsWith(sdkVersionName)) {
+            int versionPos = str.find(":");
+            if (versionPos < 0) {
+                setState(ERROR);
+                return;
+            }
+            PIStringList version = str.mid(versionPos + 1).trim().split(".");
+            if (version.size() < 4) {
+                setState(ERROR);
+                return;
+            }
+            // TODO save version
+        }
+    }
+
     mutex.lock();
     PIStringList lines = config.split("\n");
     mutex.unlock();
-    PIDeque<PIString>::iterator iter = lines.begin();
 
-    while (iter != lines.end()) {
+    for (PIDeque<PIString>::iterator iter = lines.begin(); iter != lines.end(); iter++) {
         PIString inStr = *iter;
-        iter++;
 
         if (!execDeviceCommand(inStr)) {
-            isSuccess = false;
+            setState(ERROR);
+            return;
         }
     }
 
@@ -263,12 +186,10 @@ void MMWaveDevice::onConfigure() {
         return;
     }
 
-    //msleep(1500);
     if (!dataPort->open()) {
         setState(ERROR);
         return;
     } else {
-//        dataPort->startThreadedRead();
         state = READ_DATA;
     }
 }
@@ -276,7 +197,7 @@ void MMWaveDevice::onConfigure() {
 void MMWaveDevice::onReadData() {
     if (!dataPort->isOpened()) setState(ERROR);
     PIByteArray data = dataPort->read(4096);
-    packetExtractor.onData(data.data(), data.size());
+    if (!data.isEmpty()) packetExtractor.onData(data.data(), data.size());
 }
 
 void MMWaveDevice::onStop() {

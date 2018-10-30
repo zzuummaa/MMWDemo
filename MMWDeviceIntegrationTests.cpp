@@ -9,23 +9,73 @@
 #include "mmwave/MMWaveDevice.h"
 #include "MMWaveProperties.h"
 
-TEST(MMWaveDevice_test, mmw) {
-    MMWaveDevice device("ser://COM3:115200", "ser://COM4:921600");
+class MMWaveDevice_test: public ::testing::Test, PIObject {
+PIOBJECT(MMWaveDevice_test)
+protected:
+    MMWaveProperties props;
+    PIMutex mutex;
+    MMWaveDevice* device;
+    double receiveTimeMS = 150;
 
-    MMWaveProperties properties;
-    device.setConfig(properties.toProfile().append("sensorStart\n"));
-    ASSERT_TRUE(device.startDev());
+    void SetUp() {
+        device = new MMWaveDevice("ser://COM3:115200", "ser://COM4:921600");
+        CONNECTU(device, onStateChange, this, onStateChangeHandler);
+    }
+
+    void TearDown() {
+        delete device;
+    }
+
+    EVENT_HANDLER1(void, onStateChangeHandler, MMWaveDevice::State, state) {
+        piCout << "State:" << state;
+        switch (state) {
+        case MMWaveDevice::START: mutex.lock(); break;
+        case MMWaveDevice::READ_DATA:
+        case MMWaveDevice::ERROR: mutex.unlock(); break;
+        }
+    }
+};
+
+TEST_F(MMWaveDevice_test, srr) {
+    ASSERT_TRUE(device->startDev());
+    mutex.lock();
 
     int packetCount = 0;
+    PITimeMeasurer measurer;
     while (packetCount < 10) {
-        if (!device.getPacketExtractor().hasNextPacketM()) {
+        ASSERT_GT(receiveTimeMS, measurer.elapsed_m());
+        ASSERT_NE(device->getState(), MMWaveDevice::ERROR);
+        if (!device->getPacketExtractor().hasNextPacketM()) {
             piMSleep(20);
             continue;
         }
-        MMWMessage message = device.getPacketExtractor().nextPacketM();
+        MMWMessage message = device->getPacketExtractor().nextPacketM();
         ASSERT_TRUE(message.isValidPacket());
         piCout << message;
         packetCount++;
+        measurer.reset();
+    }
+}
+
+TEST_F(MMWaveDevice_test, mmw) {
+    device->setConfig(props.toProfile().append("sensorStart\n"));
+    ASSERT_TRUE(device->startDev());
+    mutex.lock();
+
+    int packetCount = 0;
+    PITimeMeasurer measurer;
+    while (packetCount < 10) {
+        ASSERT_GT(receiveTimeMS, measurer.elapsed_m());
+        ASSERT_NE(device->getState(), MMWaveDevice::ERROR);
+        if (!device->getPacketExtractor().hasNextPacketM()) {
+            piMSleep(20);
+            continue;
+        }
+        MMWMessage message = device->getPacketExtractor().nextPacketM();
+        ASSERT_TRUE(message.isValidPacket());
+        piCout << message;
+        packetCount++;
+        measurer.reset();
     }
 }
 

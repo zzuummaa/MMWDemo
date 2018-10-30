@@ -8,9 +8,30 @@
 #include <climits>
 #include "mmwave/MMWaveDevice.h"
 #include "CmakeDefinitions.h"
+#include "string"
 
+using ::testing::Return;
+using ::testing::SetArgReferee;
+using ::testing::_;
+using ::testing::DoAll;
 
-TEST(MMWaveDevice_test, init) {
+class ConfigDeviceMOC: public PIIODevice {
+    PIIODEVICE(ConfigDeviceMOC)
+public:
+    ConfigDeviceMOC(): PIIODevice() {}
+
+    MOCK_METHOD0(openDevice, bool());
+    MOCK_METHOD2(write, int(const void * data, int max_size));
+    MOCK_METHOD2(read, int(const void * data, int max_size));
+protected:
+
+    PIString fullPathPrefix() const {return "ser";}
+    void configureFromFullPath(const PIString & full_path) {
+        // parse full_path and configure device there
+    }
+};
+
+TEST(DISABLED_MMWaveDevice_test, init) {
     PIString configPortName = PIString("file://") + TEST_FILES_DIR + "/empty.bin";
     PIString dataPortName = PIString("file://") + TEST_FILES_DIR + "/empty.bin";
     piCout << "";
@@ -19,18 +40,13 @@ TEST(MMWaveDevice_test, init) {
     MMWaveDevice device(configPortName, dataPortName);
 }
 
-TEST(MMWaveDevice_test, smart_pointers) {
-    MMWaveDevice* device = new MMWaveDevice();
-    auto configPort = device->getConfigPort();
-    auto dataPort = device->getDataPort();
+TEST(MMWaveDevice_test, MOC) {
+    ConfigDeviceMOC configPort;
 
-    ASSERT_EQ(configPort.use_count(), 2);
-    ASSERT_EQ(dataPort.use_count(), 2);
+    EXPECT_CALL(configPort, openDevice())
+            .WillOnce(Return(true));
 
-    delete device;
-
-    ASSERT_EQ(configPort.use_count(), 1);
-    ASSERT_EQ(dataPort.use_count(), 1);
+    EXPECT_TRUE(configPort.open());
 }
 
 TEST(MMWaveDevice_test, readData) {
